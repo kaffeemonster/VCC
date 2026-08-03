@@ -10,7 +10,7 @@ Compile Claude Code JSONL logs into adaptive views for reading, searching, and c
 ## Usage
 
 ```bash
-python "path/to/VCC.py" <input.jsonl ...> [options]
+python3 "path/to/VCC.py" <input.jsonl ...> [options]
 ```
 
 | Option | Description |
@@ -23,7 +23,7 @@ python "path/to/VCC.py" <input.jsonl ...> [options]
 This tool also supports multi-file processing:
 
 ```bash
-cd "/path/to/target/folder" && python "path/to/VCC.py" *.jsonl --grep "keyword"
+cd "/path/to/target/folder" && python3 "path/to/VCC.py" *.jsonl --grep "keyword"
 ```
 
 ## Output Files
@@ -38,6 +38,7 @@ cd "/path/to/target/folder" && python "path/to/VCC.py" *.jsonl --grep "keyword"
 ## Rules
 
 - **Forward slashes only in bash commands.** Backslashes in double quotes are escape characters — `\U`, `\l`, `\.` get silently mangled. Use `"C:/Users/..."` not `"C:\Users\..."`. This applies to ALL bash commands (not just this skill), on ALL platforms (Windows and Linux alike).
+- **Use `python3`, not `python`.** On macOS and most Linux distributions there is no bare `python` on PATH, so the command dies with `spawn python ENOENT`. An interactive shell may appear to resolve `python` via an alias or shell function, but agent tool harnesses spawn without shell init files, so `command -v python` succeeding is not evidence the command will run. On Windows use `python` instead — there, `python3` is usually an App Execution Alias rather than a real interpreter.
 - Do NOT use `-o` unless the user explicitly requests an output directory. By default, compiled files are written next to the input JSONL — this is the intended behavior.
 - Do NOT clean up compiled output files after use. Leave them in place unless the user explicitly asks to clean up.
 
@@ -46,7 +47,7 @@ cd "/path/to/target/folder" && python "path/to/VCC.py" *.jsonl --grep "keyword"
 **1. Compile**
 
 ```bash
-python "path/to/VCC.py" "path/to/conversation.jsonl"
+python3 "path/to/VCC.py" "path/to/conversation.jsonl"
 ```
 
 Produces `.txt` + `.min.txt` next to the input file. Long conversations are automatically split into numbered chunks. The console output lists every produced file with line/word counts — read it to understand the conversation's size and structure before proceeding:
@@ -85,7 +86,7 @@ Each `*` line shows the tool name, key parameter, and two `.txt` line ranges: th
 Always use `--grep`, never system grep nor your embedded Grep tool. This script's `--grep` returns important block-level line RANGES that no other grep tools can provide. The output paths are relative to CWD, so `cd` close to the target first to keep outputs short and save tokens.
 
 ```bash
-cd "/path/to/target/folder" && python "path/to/VCC.py" "path/to/conversation.jsonl" --grep "keyword"
+cd "/path/to/target/folder" && python3 "path/to/VCC.py" "path/to/conversation.jsonl" --grep "keyword"
 ```
 
 Stdout example (`#` prefix = shortened filename)：
@@ -116,10 +117,10 @@ All line references point to `.txt`. Read the referenced range for full context.
 **Action**:
 
 1. `ls ~/.claude/projects/` — browse project directories, narrow the search area.
-2. `cd ~/.claude/projects/<project> && python "absolute/path/to/VCC.py" *.jsonl --grep "keyword"` — search top-level conversations first.
-3. If no results: `cd ~/.claude/projects/<project> && python "absolute/path/to/VCC.py" **/*.jsonl --grep "keyword"` — expand to subagents.
+2. `cd ~/.claude/projects/<project> && python3 "absolute/path/to/VCC.py" *.jsonl --grep "keyword"` — search top-level conversations first.
+3. If no results: `cd ~/.claude/projects/<project> && python3 "absolute/path/to/VCC.py" **/*.jsonl --grep "keyword"` — expand to subagents.
 
-**Critical**: Always `cd` into the target directory first, then use VCC globs — a single `cd && python VCC.py <glob> --grep` is the correct pattern. Without `cd`, grep output contains full absolute paths instead of short relative paths, wasting tokens. All content search on JSONL must use VCC's `--grep`, never system grep or the embedded Grep tool — VCC's `--grep` returns block-level line ranges with role tags that no other grep can provide.
+**Critical**: Always `cd` into the target directory first, then use VCC globs — a single `cd && python3 "path/to/VCC.py" <glob> --grep` is the correct pattern. Without `cd`, grep output contains full absolute paths instead of short relative paths, wasting tokens. All content search on JSONL must use VCC's `--grep`, never system grep or the embedded Grep tool — VCC's `--grep` returns block-level line ranges with role tags that no other grep can provide.
 
 ## /recall — Recover context from a previous conversation
 
