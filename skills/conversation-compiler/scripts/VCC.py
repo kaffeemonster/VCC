@@ -848,7 +848,7 @@ def lower_brief(ir, truncate, filename="", truncate_user=256):
 
 # ── lowering: view ──
 
-def lower_view(ir, filename="", grep_pattern=None):
+def lower_view(ir, filename="", grep_pattern=None, limit=0, brief=False):
     if not grep_pattern:
         # No grep: view is same as truncated (shouldn't normally be called)
         for o in ir:
@@ -861,19 +861,26 @@ def lower_view(ir, filename="", grep_pattern=None):
     def _node_matches(o):
         if not o["searchable"]:
             return False
-        for line in o["content"]:
+        src = o["content_brief"] if brief else o["content"]
+        if not src:
+            return False
+        for line in src:
             if grep_pattern.search(line):
                 return True
         return False
 
     # Pass 1: determine visibility for each searchable block
     block_visible = {}  # blk -> bool
+    count = 0
     for o in ir:
         blk = o.get("_blk")
         if blk is None or blk in block_visible:
             continue
         if o["searchable"] and _node_matches(o):
             block_visible[blk] = True
+            count += 1
+            if limit and count >= limit:
+                break
 
     # Derive which sections have any visible block (for header/separator logic)
     sec_has_visible = set()
@@ -930,6 +937,9 @@ def lower_view(ir, filename="", grep_pattern=None):
 
         # Searchable content blocks: show only if this block matches
         if o["searchable"]:
+            if limit and not block_visible.get(blk):
+                o["content_view"] = None
+                continue
             if _node_matches(o):
                 node_start = o.get("start_line", 0) + 1
                 o["content_view"] = match_lines(
@@ -960,26 +970,31 @@ def _rel_path(fp):
     except ValueError:
         return os.path.abspath(fp)
 
-def grep_search(results, pattern):
+def grep_search(results, pattern, limit=0, brief=False):
     first = True
+    count = 0
     for filepath, ir in reversed(results):
         short = _rel_path(filepath)
         for o in reversed(ir):
             if not o["searchable"]: continue
-            lines = match_lines(o["content"], pattern, short, o.get("start_line", 0) + 1)
+            src = o["content_brief"] if brief else o["content"]
+            lines = match_lines(src, pattern, short, o.get("start_line", 0) + 1)
             if len(lines) <= 1:
                 continue
+            count += 1
             if not first: print()
             first = False
             print(f"{lines[0]} [{o['type']}]")
             for lt in lines[1:]:
                 print(lt)
+            if limit and count >= limit:
+                return
 
 
 # ── compile ──
 
 def compile_pass(input_path, output_dir=None, truncate=128, truncate_user=256,
-            grep_pattern=None, quiet=False):
+            grep_pattern=None, quiet=False, grep_limit=0, grep_brief=False):
     if output_dir is None:
         output_dir = os.path.dirname(os.path.abspath(input_path)) or "."
     os.makedirs(output_dir, exist_ok=True)
@@ -1019,7 +1034,7 @@ def compile_pass(input_path, output_dir=None, truncate=128, truncate_user=256,
         with open(mp, "w", encoding="utf-8") as f: f.write("\n".join(brief))
 
         if grep_pattern:
-            lower_view(ir, ffn, grep_pattern)
+            lower_view(ir, ffn, grep_pattern, grep_limit, grep_brief)
             view = emit(ir, "content_view")
             with open(vp, "w", encoding="utf-8") as f: f.write("\n".join(view))
 
@@ -1058,6 +1073,10 @@ def main():
     p.add_argument("-t", "--truncate", nargs="?", type=int, const=128, default=128, metavar="N")
     p.add_argument("-tu", "--truncate-user", nargs="?", type=int, const=256, default=256, metavar="N")
     p.add_argument("--grep", metavar="PATTERN")
+    p.add_argument("--limit", type=int, metavar="N", default=0,
+                   help="Max block matches to report per file (0 = unlimited)")
+    p.add_argument("--brief", action="store_true",
+                   help="Search brief (min) view content instead of full content")
     a = p.parse_args()
     try:
         a.grep = re.compile(a.grep) if a.grep else None
@@ -1066,10 +1085,11 @@ def main():
     all_results = []
     for f in _expand_inputs(a.input):
         res = compile_pass(f, a.output_dir, a.truncate, a.truncate_user,
-                      a.grep, quiet=bool(a.grep))
+                      a.grep, quiet=bool(a.grep),
+                      grep_limit=a.limit, grep_brief=a.brief)
         all_results.extend(res)
     if a.grep:
-        grep_search(all_results, a.grep)
+        grep_search(all_results, a.grep, a.limit, a.brief)
 
 if __name__ == "__main__":
     if sys.stdout.encoding and sys.stdout.encoding.lower().replace("-", "") != "utf8":
