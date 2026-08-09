@@ -19,6 +19,13 @@ python3 "path/to/VCC.py" <input.jsonl ...> [options]
 | `-t <N>` | Token truncation limit (default 128) |
 | `-tu <N>` | User message token limit (default 256) |
 | `--grep <pattern>` | Regex search pattern (Python `re` — use `a|b`, NOT `a\|b`) |
+| `--search <query>` | Natural-language BM25 search (ranked, stems EN/DE, CJK bigrams). Mutually exclusive with `--grep` |
+| `--limit <N>` | Max block matches to report per file (0 = unlimited) |
+| `--brief` | Search brief (min) view content instead of full content; narrower, faster |
+| `--order newest\|oldest` | Grep output order (default newest) |
+| `--offset <N>` | Skip this many matches before reporting (0 = none). Pairs with `--limit` for pagination |
+| `--fusion` | RRF-fuse full and brief BM25F ranked lists (k=60) |
+| `--bm25l` | Use BM25L scoring instead of BM25F (no fusion). Mutually exclusive with `--fusion` |
 
 This tool also supports multi-file processing:
 
@@ -95,6 +102,10 @@ Stdout example (`#` prefix = shortened filename)：
 (#752a87.txt:L67-L81) [assistant]      →  .txt lines 67-81
   77: one matched line ...             →  .txt line 77
 ```
+
+For natural-language searches (fuzzy, stemmed, stopword-aware) use `--search "some query"` instead of `--grep`; output adds `score=` and `event=` columns plus the same block-level line-range references. Combine with `--limit`/`--offset` for pagination.
+
+`--order newest|oldest` and `--offset` also work with both `--grep` and `--search` for paging long result lists — raise `--limit` rather than paginating when the full list is wanted.
 
 Optionally read `.view.txt` for focused search view.
 
