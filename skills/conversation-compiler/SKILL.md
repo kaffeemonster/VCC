@@ -24,6 +24,7 @@ python3 "path/to/VCC.py" <input.jsonl ...> [options]
 | `--brief` | Search brief (min) view content instead of full content; narrower, faster |
 | `--order newest\|oldest` | Grep output order (default newest) |
 | `--offset <N>` | Skip this many matches before reporting (0 = none). Pairs with `--limit` for pagination |
+| `--ref <id>` | Locate a message by its id (export `message.id`, opencode msg id) and print its section with line refs. Replaces --grep/--search |
 | `--fusion` | RRF-fuse full and brief BM25F ranked lists (k=60) |
 | `--bm25l` | Use BM25L scoring instead of BM25F (no fusion). Mutually exclusive with `--fusion` |
 
@@ -106,6 +107,8 @@ Stdout example (`#` prefix = shortened filename)：
 For natural-language searches (fuzzy, stemmed, stopword-aware) use `--search "some query"` instead of `--grep`; output adds `score=` and `event=` columns plus the same block-level line-range references. Combine with `--limit`/`--offset` for pagination.
 
 `--order newest|oldest` and `--offset` also work with both `--grep` and `--search` for paging long result lists — raise `--limit` rather than paginating when the full list is wanted.
+
+For exact message lookup, `--ref '<message-id>'` jumps straight to that message's section with line refs — no search needed. Message ids are exposed in the export as `message.id`.
 
 Optionally read `.view.txt` for focused search view.
 

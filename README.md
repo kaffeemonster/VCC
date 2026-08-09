@@ -6,6 +6,17 @@
 
 Official implementation of "View-oriented Conversation Compiler for Agent Trace Analysis" ([Paper](https://arxiv.org/abs/2603.29678))
 
+<!-- fork banner -->
+> [!IMPORTANT]
+> **Community fork** (kaffeemonster) with extensions beyond upstream:
+>
+> - **BM25 natural-language search** (`--search`) — relevance ranking with EN/DE stopwords, English+German stemming, CJK bigrams; BM25F/BM25L scoring + RRF fusion (`--fusion`, `--bm25l`)
+> - **Result navigation** — `--limit`, `--offset`, `--order newest|oldest` pagination on both grep and search
+> - **Anchors** — `--from-line N` (only results at/after .txt line N) and `--ref <message-id>` (locate a message by its exported `message.id`)
+> - **Grep output enrichment** — `--context N` window widening and `event=` timestamps on matches
+>
+> Pure stdlib Python, no new dependencies. See `skills/conversation-compiler/SKILL.md` for the full option reference.
+
 This repo is for daily use. To reproduce academic experiments in the paper, see [VCC-experiments](https://github.com/lllyasviel/VCC-experiments).
 
 VCC is a compiler that compiles your conversation logs (Claude Code's JSONL) into efficient and agent-friendly views. Then you will never fear Claude Code's `/compact` - CC now can finally see the original details of compacted context. It also supports searching across all your Claude Code conversations.

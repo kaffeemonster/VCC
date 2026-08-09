@@ -340,6 +340,7 @@ def parse(chain, outdir, data_prefix, data_ctr):
     sec = 0
     blk = 0
     active_timestamp = None
+    cur_rid = None
 
     tid_name = {}
     for r in chain:
@@ -354,7 +355,8 @@ def parse(chain, outdir, data_prefix, data_ctr):
 
     def _emit_header(h):
         ir.append(_node("meta_header", [h, ""], _sec=sec,
-                        _event_timestamp=active_timestamp))
+                        _event_timestamp=active_timestamp,
+                        _msg_id=cur_rid))
 
     def _emit_blocks(blocks, text_type):
         nonlocal blk
@@ -423,6 +425,7 @@ def parse(chain, outdir, data_prefix, data_ctr):
     for r in chain:
         rt = r.get("type")
         active_timestamp = r.get("timestamp")
+        cur_rid = (r.get("message") or {}).get("id")
 
         if rt == "system":
             if r.get("subtype") == "compact_boundary": continue
@@ -853,7 +856,7 @@ def lower_brief(ir, truncate, filename="", truncate_user=256):
 # ── lowering: view ──
 
 def lower_view(ir, filename="", grep_pattern=None, limit=0, brief=False,
-               offset=0, order="newest"):
+               offset=0, order="newest", from_line=0, context=0):
     if not grep_pattern:
         # No grep: view is same as truncated (shouldn't normally be called)
         for o in ir:
@@ -882,13 +885,16 @@ def lower_view(ir, filename="", grep_pattern=None, limit=0, brief=False,
         blk = o.get("_blk")
         if blk is None or blk in block_visible:
             continue
-        if o["searchable"] and _node_matches(o):
-            count += 1
-            if count > offset:
-                block_visible[blk] = True
-                match_order.append(blk)
-                if limit and len(match_order) >= limit:
-                    break
+        if o["searchable"]:
+            if from_line and o.get("start_line", 0) + 1 < from_line:
+                continue
+            if _node_matches(o):
+                count += 1
+                if count > offset:
+                    block_visible[blk] = True
+                    match_order.append(blk)
+                    if limit and len(match_order) >= limit:
+                        break
 
     # Derive which sections have any visible block (for header/separator logic)
     sec_has_visible = set()
@@ -951,8 +957,21 @@ def lower_view(ir, filename="", grep_pattern=None, limit=0, brief=False,
                     continue
                 if _node_matches(o):
                     node_start = o.get("start_line", 0) + 1
-                    o["content_view"] = match_lines(
-                        o["content"], grep_pattern, short, node_start)
+                    if context:
+                        src = o["content"]
+                        matched = [i for i, l in enumerate(src) if grep_pattern.search(l)]
+                        if matched:
+                            lo = max(matched[0] - context, 0)
+                            hi = min(matched[-1] + context + 1, len(src))
+                            o["content_view"] = [
+                                f"{node_start + i}: {ln}"
+                                for i, ln in enumerate(src[lo:hi], start=lo)
+                            ]
+                        else:
+                            o["content_view"] = None
+                    else:
+                        o["content_view"] = match_lines(
+                            o["content"], grep_pattern, short, node_start)
                 else:
                     o["content_view"] = None
                 continue
@@ -982,7 +1001,8 @@ def _rel_path(fp):
     except ValueError:
         return os.path.abspath(fp)
 
-def grep_search(results, pattern, limit=0, brief=False, order="newest", offset=0):
+def grep_search(results, pattern, limit=0, brief=False, order="newest", offset=0,
+                from_line=0, context=0):
     first = True
     count = 0
     oldest = order == "oldest"
@@ -995,8 +1015,19 @@ def grep_search(results, pattern, limit=0, brief=False, order="newest", offset=0
         }
         for o in (ir if oldest else reversed(ir)):
             if not o["searchable"]: continue
+            start = o.get("start_line", 0) + 1
+            if from_line and start < from_line:
+                continue
             src = o["content_brief"] if brief else o["content"]
-            lines = match_lines(src, pattern, short, o.get("start_line", 0) + 1)
+            if context and src:
+                matched = [i for i, l in enumerate(src) if pattern.search(l)]
+                if not matched:
+                    continue
+                lo = max(matched[0] - context, 0)
+                hi = min(matched[-1] + context + 1, len(src))
+                lines = [f"{start+i}: {src[i]}" for i in range(lo, hi)]
+            else:
+                lines = match_lines(src, pattern, short, start)
             if len(lines) <= 1:
                 continue
             count += 1
@@ -1011,6 +1042,38 @@ def grep_search(results, pattern, limit=0, brief=False, order="newest", offset=0
                 print(lt)
             if limit and count - offset >= limit:
                 return
+
+
+def ref_locate(results, ref, limit=0):
+    # Find sections whose meta_header carries the given message id; print them with line refs.
+    found = False
+    count = 0
+    for filepath, ir in results:
+        short = _rel_path(filepath)
+        secs = {}  # sec -> list of nodes
+        for o in ir:
+            secs.setdefault(o.get("_sec"), []).append(o)
+        for o in ir:
+            if o.get("_msg_id") != ref or o["type"] != "meta_header":
+                continue
+            found = True
+            sec = o.get("_sec")
+            nodes = secs.get(sec, [])
+            start = min((n.get("start_line", 0) for n in nodes), default=0) + 1
+            end = max((n.get("start_line", 0) for n in nodes), default=0) + 1
+            if count:
+                print()
+            print(f"({short}:{start}-{end}) [{ref}] {sec or ''}")
+            for n in nodes:
+                content = n.get("content") or []
+                for i, line in enumerate(content):
+                    ln = n.get("start_line", 0) + 1 + i
+                    print(f"  {ln}: {line}")
+            count += 1
+            if limit and count >= limit:
+                return
+    if not found:
+        print(f"ref {ref} not found in session.")
 
 
 # ── BM25 text search ──
@@ -1295,7 +1358,8 @@ def _node_prior(o, cur_tool, content_lines):
         return 12
     return 0
 
-def bm25_search(results, query, limit=0, brief=False, fusion=False, bm25l=False, offset=0):
+def bm25_search(results, query, limit=0, brief=False, fusion=False, bm25l=False,
+                offset=0, from_line=0, context=0):
     query_terms = _analyze(query)
     if not query_terms:
         print("No searchable terms in query.")
@@ -1325,6 +1389,9 @@ def bm25_search(results, query, limit=0, brief=False, fusion=False, bm25l=False,
                     cur_tool = m.group(1)
                 continue
             if not o.get("searchable"):
+                continue
+            start = o.get("start_line", 0) + 1
+            if from_line and start < from_line:
                 continue
             full_src = o.get("content") or []
             brief_src = o.get("content_brief") or []
@@ -1401,7 +1468,8 @@ def bm25_search(results, query, limit=0, brief=False, fusion=False, bm25l=False,
         first = False
         print(f"({short}:{start}-{start}) [{o['type']}] score={sc:.2f}{ts_suffix}")
         src = o.get("content_brief") if brief else o.get("content")
-        for line in (src or [])[:8]:
+        n = max(8, context) if context else 8
+        for line in (src or [])[:n]:
             print(f"   {line}")
         if limit and count - offset >= limit:
             return
@@ -1411,7 +1479,7 @@ def bm25_search(results, query, limit=0, brief=False, fusion=False, bm25l=False,
 
 def compile_pass(input_path, output_dir=None, truncate=128, truncate_user=256,
             grep_pattern=None, quiet=False, grep_limit=0, grep_brief=False,
-            grep_offset=0, grep_order="newest"):
+            grep_offset=0, grep_order="newest", grep_from_line=0, grep_context=0):
     if output_dir is None:
         output_dir = os.path.dirname(os.path.abspath(input_path)) or "."
     os.makedirs(output_dir, exist_ok=True)
@@ -1452,7 +1520,7 @@ def compile_pass(input_path, output_dir=None, truncate=128, truncate_user=256,
 
         if grep_pattern:
             lower_view(ir, ffn, grep_pattern, grep_limit, grep_brief,
-                       grep_offset, grep_order)
+                       grep_offset, grep_order, grep_from_line, grep_context)
             view = emit(ir, "content_view")
             if grep_order == "newest":
                 view.reverse()
@@ -1501,30 +1569,41 @@ def main():
                    help="grep output order: newest (default) or oldest (chronological)")
     p.add_argument("--offset", type=int, default=0,
                    help="Skip this many matches before reporting (0 = none)")
+    p.add_argument("--from-line", type=int, default=0,
+                   help="Only report blocks whose .txt start line is >= N")
+    p.add_argument("--context", type=int, default=0, metavar="N",
+                   help="Include N context lines around each match (grep) or show up to N lines (search)")
     p.add_argument("--search", metavar="QUERY",
                    help="BM25 text search (instead of regex grep)")
     p.add_argument("--fusion", action="store_true",
                    help="RRF-fuse full and brief BM25F ranked lists (k=60)")
     p.add_argument("--bm25l", action="store_true",
                    help="use BM25L scoring instead of BM25F (no fusion)")
+    p.add_argument("--ref", metavar="ID",
+                   help="Locate a message by its id and print its section with line refs")
     a = p.parse_args()
     try:
         a.grep = re.compile(a.grep) if a.grep else None
     except re.error as e:
         p.error(f"invalid regex for --grep: {e}")
-    if a.grep and a.search:
-        p.error("use --grep OR --search, not both")
+    if sum(bool(x) for x in (a.grep, a.search, a.ref)) > 1:
+        p.error("use only one of --grep, --search, --ref")
     all_results = []
     for f in _expand_inputs(a.input):
         res = compile_pass(f, a.output_dir, a.truncate, a.truncate_user,
-                      a.grep, quiet=bool(a.grep or a.search),
+                      a.grep, quiet=bool(a.grep or a.search or a.ref),
                       grep_limit=a.limit, grep_brief=a.brief,
-                      grep_offset=a.offset, grep_order=a.order)
+                      grep_offset=a.offset, grep_order=a.order,
+                      grep_from_line=a.from_line, grep_context=a.context)
         all_results.extend(res)
     if a.grep:
-        grep_search(all_results, a.grep, a.limit, a.brief, a.order, a.offset)
+        grep_search(all_results, a.grep, a.limit, a.brief, a.order, a.offset,
+                    a.from_line, a.context)
     if a.search:
-        bm25_search(all_results, a.search, a.limit, a.brief, a.fusion, a.bm25l, a.offset)
+        bm25_search(all_results, a.search, a.limit, a.brief, a.fusion, a.bm25l,
+                    a.offset, a.from_line, a.context)
+    if a.ref:
+        ref_locate(all_results, a.ref, a.limit)
 
 if __name__ == "__main__":
     if sys.stdout.encoding and sys.stdout.encoding.lower().replace("-", "") != "utf8":
