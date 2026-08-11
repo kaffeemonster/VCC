@@ -123,7 +123,7 @@ python3 "path/to/vcc-semantic.py" "path/to/conversation.jsonl" --query "auth flo
 - `--provider api` (default) — OpenAI-compatible `/v1/embeddings` endpoint (e.g. local llama.cpp), stdlib only, zero pip deps. Configure with `--api-url` (default `http://127.0.0.1:8012/v1/embeddings`) and `--api-key`.
 - `--provider onnx` — local `all-MiniLM-L6-v2` (384-dim) via `onnxruntime` + `tokenizers` + `numpy` (`pip install onnxruntime tokenizers`). Model + tokenizer auto-download on first use to `$XDG_CACHE_HOME/vcc/all-MiniLM-L6-v2/`.
 - Embeddings cache incrementally next to the export (`<export>.emb.json`) — re-runs embed only new records. `--no-cache` to skip.
-- Line refs point at the JSONL export record lines. If it fails (server down, missing deps) it exits 1 with an error on stderr — grep/search/ref are unaffected.
+- Line refs point at the `.txt` view when VCC.py has compiled a section map (`<base>.map.json`, msg_id → `.txt` spans) — compile once first so semantic hits share the same line space as grep/search/ref. Without a map they fall back to JSONL record lines. If it fails (server down, missing deps) it exits 1 with an error on stderr — grep/search/ref are unaffected.
 
 **4. Jump to `.txt`**
 
