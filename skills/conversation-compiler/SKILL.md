@@ -112,6 +112,19 @@ For exact message lookup, `--ref '<message-id>'` jumps straight to that message'
 
 Optionally read `.view.txt` for focused search view.
 
+**3b. Semantic search (optional sidecar)**
+
+`scripts/vcc-semantic.py` adds natural-language semantic search: embeds each record's text and ranks by cosine similarity, finding relevant messages even when no keyword matches (great for "why did the auth flow break?"-style recall). Independent of `VCC.py` — it only needs the export JSONL.
+
+```bash
+python3 "path/to/vcc-semantic.py" "path/to/conversation.jsonl" --query "auth flow broke" --limit 5 [--provider api|onnx]
+```
+
+- `--provider api` (default) — OpenAI-compatible `/v1/embeddings` endpoint (e.g. local llama.cpp), stdlib only, zero pip deps. Configure with `--api-url` (default `http://127.0.0.1:8012/v1/embeddings`) and `--api-key`.
+- `--provider onnx` — local `all-MiniLM-L6-v2` (384-dim) via `onnxruntime` + `tokenizers` + `numpy` (`pip install onnxruntime tokenizers`). Model + tokenizer auto-download on first use to `$XDG_CACHE_HOME/vcc/all-MiniLM-L6-v2/`.
+- Embeddings cache incrementally next to the export (`<export>.emb.json`) — re-runs embed only new records. `--no-cache` to skip.
+- Line refs point at the JSONL export record lines. If it fails (server down, missing deps) it exits 1 with an error on stderr — grep/search/ref are unaffected.
+
 **4. Jump to `.txt`**
 
 All line references point to `.txt`. Read the referenced range for full context. Remember to read a bit more lines before and after the referenced range to get more context.

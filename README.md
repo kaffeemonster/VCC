@@ -14,6 +14,7 @@ Official implementation of "View-oriented Conversation Compiler for Agent Trace 
 > - **Result navigation** — `--limit`, `--offset`, `--order newest|oldest` pagination on both grep and search
 > - **Anchors** — `--from-line N` (only results at/after .txt line N) and `--ref <message-id>` (locate a message by its exported `message.id`)
 > - **Grep output enrichment** — `--context N` window widening and `event=` timestamps on matches
+> - **Semantic search sidecar** — `scripts/vcc-semantic.py`: cosine-ranked natural-language search via OpenAI-compatible embeddings API (llama.cpp) or local ONNX MiniLM; incremental embedding cache; failure-isolated from core tools
 >
 > Pure stdlib Python, no new dependencies. See `skills/conversation-compiler/SKILL.md` for the full option reference.
 
