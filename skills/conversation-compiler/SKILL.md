@@ -124,6 +124,8 @@ python3 "path/to/vcc-semantic.py" "path/to/conversation.jsonl" --query "auth flo
 - `--provider onnx` — local `all-MiniLM-L6-v2` (384-dim) via `onnxruntime` + `tokenizers` + `numpy` (`pip install onnxruntime tokenizers`). Model + tokenizer auto-download on first use to `$XDG_CACHE_HOME/vcc/all-MiniLM-L6-v2/`.
 - Embeddings cache incrementally next to the export (`<export>.emb.json`) — re-runs embed only new records. `--no-cache` to skip.
 - Line refs point at the `.txt` view when VCC.py has compiled a section map (`<base>.map.json`, msg_id → `.txt` spans) — compile once first so semantic hits share the same line space as grep/search/ref. Without a map they fall back to JSONL record lines. If it fails (server down, missing deps) it exits 1 with an error on stderr — grep/search/ref are unaffected.
+- `--blocks` folds record-level results to per-message sections (using `<base>.map.json` blocks) — same inventory as BM25 `--sec-level`, so the two rankers can be merged cleanly.
+- `--sec-level` on `VCC.py --search` folds per-node BM25 scores into per-message spans; combined with semantic `--blocks` both rankers emit identical whole-message spans. The DCP plugin's view tool fuses them via RRF (hybrid search, `fusion=true` in opencode).
 
 **4. Jump to `.txt`**
 
